@@ -97,20 +97,7 @@ export async function updateTimeEntry(
   if (userError) throw userError
   if (!user) throw new Error('User not authenticated')
 
-  // First verify the entry exists and belongs to the user
-  const { data: existingEntry, error: fetchError } = await supabase
-    .from('time_entries')
-    .select('*')
-    .eq('id', id)
-    .eq('user_id', user.id)
-    .single()
-
-  if (fetchError) {
-    console.error('Fetch error:', fetchError)
-    throw new Error('Time entry not found or access denied')
-  }
-
-  // Then update the entry
+  // Update the entry
   const { data, error } = await supabase
     .from('time_entries')
     .update({
@@ -122,12 +109,15 @@ export async function updateTimeEntry(
     .eq('id', id)
     .eq('user_id', user.id) // Ensure we only update user's own entries
     .select()
-    .single()
 
   if (error) {
     console.error('Update error:', error)
     throw error
   }
 
-  return data
+  if (!data || data.length === 0) {
+    throw new Error('Time entry not found or access denied')
+  }
+
+  return data[0]
 }

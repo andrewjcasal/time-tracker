@@ -32,15 +32,25 @@ interface TimeEntriesProps {
   initialProjects: Project[]
 }
 
+interface TimeHistoryProps {
+  entries: TimeEntry[]
+  onDelete: (id: string) => void
+  onUpdate: (id: string, updatedEntry?: TimeEntry) => void
+}
+
 export default function TimeEntries({
   initialEntries,
   initialProjects,
 }: TimeEntriesProps) {
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>(initialEntries)
   const [projects, setProjects] = useState<Project[]>(initialProjects)
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
   const refreshData = useCallback(async () => {
+    if (isRefreshing) return // Prevent multiple simultaneous refreshes
+
     try {
+      setIsRefreshing(true)
       // Fetch fresh time entries
       const response = await fetch("/api/time-entries")
       if (!response.ok) throw new Error("Failed to fetch time entries")
@@ -54,8 +64,25 @@ export default function TimeEntries({
       setProjects(projectsData)
     } catch (error) {
       console.error("Error refreshing data:", error)
+    } finally {
+      setIsRefreshing(false)
     }
-  }, [])
+  }, [isRefreshing])
+
+  const handleUpdate = useCallback(
+    (id: string, updatedEntry?: TimeEntry) => {
+      if (updatedEntry) {
+        // Optimistic update
+        setTimeEntries((prev) =>
+          prev.map((entry) => (entry.id === id ? updatedEntry : entry))
+        )
+      } else {
+        // Fallback to refresh
+        refreshData()
+      }
+    },
+    [refreshData]
+  )
 
   const handleDelete = async (id: string) => {
     try {
@@ -131,7 +158,7 @@ export default function TimeEntries({
       <TimeHistory
         entries={timeEntries}
         onDelete={handleDelete}
-        onUpdate={refreshData}
+        onUpdate={handleUpdate}
       />
     </>
   )

@@ -15,7 +15,7 @@ interface TimeEntry {
 interface TimeHistoryProps {
   entries: TimeEntry[]
   onDelete: (id: string) => void
-  onUpdate: (id: string) => void
+  onUpdate: (id: string, updatedEntry?: TimeEntry) => void
 }
 
 export default function TimeHistory({
@@ -30,8 +30,34 @@ export default function TimeHistory({
     description: "",
   })
 
-  const formatDate = (timestamp: number) => {
-    return new Date(timestamp).toLocaleString()
+  const formatDate = (timestamp: number, compareDate?: number) => {
+    const date = new Date(timestamp)
+    const compareWith = compareDate ? new Date(compareDate) : null
+
+    // Format time
+    const timeStr = date
+      .toLocaleString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      })
+      .toLowerCase()
+
+    // If we have a compare date and it's the same day, only return time
+    if (
+      compareWith &&
+      date.getDate() === compareWith.getDate() &&
+      date.getMonth() === compareWith.getMonth() &&
+      date.getFullYear() === compareWith.getFullYear()
+    ) {
+      return timeStr
+    }
+
+    // Otherwise return full date
+    const monthStr = date.toLocaleString("en-US", { month: "short" })
+    const dayStr = date.getDate()
+
+    return `${monthStr} ${dayStr}, ${timeStr}`
   }
 
   const formatDateForInput = (timestamp: number) => {
@@ -52,7 +78,7 @@ export default function TimeHistory({
     const hours = Math.floor(ms / 1000 / 60 / 60)
     const decimalHours = (ms / (1000 * 60 * 60)).toFixed(2)
 
-    return `${hours}h ${minutes}m ${seconds}s (${decimalHours}h)`
+    return `${hours}h ${minutes}m ${seconds}s / ${decimalHours}h`
   }
 
   const handleEdit = (entry: TimeEntry) => {
@@ -79,12 +105,37 @@ export default function TimeHistory({
       const startDate = new Date(editForm.startTime)
       const endDate = new Date(editForm.endTime)
 
+      // Calculate duration for optimistic update
+      const duration = endDate.getTime() - startDate.getTime()
+
+      // Find the entry being edited
+      const entryToUpdate = entries.find((entry) => entry.id === id)
+      if (!entryToUpdate) {
+        throw new Error("Entry not found")
+      }
+
+      // Create optimistically updated entry
+      const updatedEntry = {
+        ...entryToUpdate,
+        startTime: startDate.getTime(),
+        endTime: endDate.getTime(),
+        duration,
+        description: editForm.description,
+      }
+
+      // Optimistically update UI
+      onUpdate(id, updatedEntry)
+
+      // Perform the actual update
       await updateTimeEntry(id, startDate, endDate, editForm.description)
-      onUpdate(id)
+
+      // Reset edit state
       setEditingId(null)
     } catch (error) {
       console.error("Error updating time entry:", error)
       alert("Failed to update time entry")
+      // Refresh data to ensure UI is in sync
+      onUpdate(id)
     }
   }
 
@@ -110,10 +161,10 @@ export default function TimeHistory({
           {entries.map((entry) => (
             <div
               key={entry.id}
-              className="border-b border-[#1e1f22] pb-4 last:border-b-0 last:pb-0 hover:bg-[#383a40] -mx-6 px-6 transition-colors group"
+              className="border border-[#1e1f22] rounded-lg overflow-hidden group"
             >
               {editingId === entry.id ? (
-                <div className="space-y-3">
+                <div className="p-4 space-y-3 bg-[#383a40]">
                   <div>
                     <label className="block text-sm text-gray-400 mb-1">
                       Start Time
@@ -124,7 +175,7 @@ export default function TimeHistory({
                       onChange={(e) =>
                         setEditForm({ ...editForm, startTime: e.target.value })
                       }
-                      className="w-full p-2 rounded bg-[#383a40] border-none text-white focus:ring-2 focus:ring-[#5865f2] outline-none"
+                      className="w-full p-2 rounded bg-[#2b2d31] border-none text-white focus:ring-2 focus:ring-[#5865f2] outline-none"
                     />
                   </div>
                   <div>
@@ -137,7 +188,7 @@ export default function TimeHistory({
                       onChange={(e) =>
                         setEditForm({ ...editForm, endTime: e.target.value })
                       }
-                      className="w-full p-2 rounded bg-[#383a40] border-none text-white focus:ring-2 focus:ring-[#5865f2] outline-none"
+                      className="w-full p-2 rounded bg-[#2b2d31] border-none text-white focus:ring-2 focus:ring-[#5865f2] outline-none"
                     />
                   </div>
                   <div>
@@ -152,47 +203,45 @@ export default function TimeHistory({
                           description: e.target.value,
                         })
                       }
-                      className="w-full p-2 rounded bg-[#383a40] border-none text-white focus:ring-2 focus:ring-[#5865f2] outline-none resize-none h-20"
+                      className="w-full p-2 rounded bg-[#2b2d31] border-none text-white focus:ring-2 focus:ring-[#5865f2] outline-none resize-none h-20"
                     />
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 justify-end">
+                    <button
+                      onClick={handleCancelEdit}
+                      className="text-white px-4 py-2 rounded hover:bg-[#333] transition-colors"
+                    >
+                      Cancel
+                    </button>
                     <button
                       onClick={() => handleSaveEdit(entry.id)}
                       className="bg-[#5865f2] text-white px-4 py-2 rounded hover:bg-[#4752c4] transition-colors"
                     >
                       Save
                     </button>
-                    <button
-                      onClick={handleCancelEdit}
-                      className="bg-[#ed4245] text-white px-4 py-2 rounded hover:bg-[#c53437] transition-colors"
-                    >
-                      Cancel
-                    </button>
                   </div>
                 </div>
               ) : (
-                <div className="flex justify-between items-start">
+                <div className="p-4 flex justify-between items-start transition-colors duration-200 hover:bg-[#383a40]">
                   <div>
-                    <div className="font-semibold text-white flex items-baseline gap-2">
+                    <div className="font-semibold text-white">
                       <span>{entry.projectName}</span>
-                      {entry.description && (
-                        <span className="text-sm text-gray-400">
-                          {entry.description}
-                        </span>
-                      )}
                     </div>
-                    <div className="text-sm text-gray-400">
+                    {entry.description && (
+                      <div className="text-sm text-gray-400 mt-0.5">
+                        {entry.description}
+                      </div>
+                    )}
+                    <div className="text-sm text-gray-400 mt-1">
                       {formatDate(entry.startTime)} -{" "}
-                      {formatDate(entry.endTime)}
-                    </div>
-                    <div className="text-sm text-gray-400">
-                      Duration: {formatDuration(entry.duration)}
+                      {formatDate(entry.endTime, entry.startTime)} (
+                      {formatDuration(entry.duration)})
                     </div>
                   </div>
                   <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
                       onClick={() => handleEdit(entry)}
-                      className="text-gray-500 hover:text-[#5865f2]"
+                      className="text-gray-400 hover:text-[#5865f2] transition-colors"
                       title="Edit entry"
                     >
                       <svg
@@ -206,7 +255,7 @@ export default function TimeHistory({
                     </button>
                     <button
                       onClick={() => handleDelete(entry.id)}
-                      className="text-gray-500 hover:text-[#ed4245]"
+                      className="text-gray-400 hover:text-[#ed4245] transition-colors"
                       title="Delete entry"
                     >
                       <svg

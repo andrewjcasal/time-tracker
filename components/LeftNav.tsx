@@ -1,12 +1,14 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { useState, useEffect } from "react"
 import { Menu, X } from "lucide-react"
+import { supabase } from "@/lib/supabase"
 
 export default function LeftNav() {
   const pathname = usePathname()
+  const router = useRouter()
   const [isOpen, setIsOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
 
@@ -25,6 +27,16 @@ export default function LeftNav() {
     window.addEventListener("resize", checkIfMobile)
     return () => window.removeEventListener("resize", checkIfMobile)
   }, [])
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut()
+      router.push("/login")
+      router.refresh()
+    } catch (error) {
+      console.error("Error logging out:", error)
+    }
+  }
 
   const navItems = [
     { name: "Timer", path: "/" },
@@ -53,9 +65,9 @@ export default function LeftNav() {
       <div
         className={`${
           isOpen ? "translate-x-0" : "-translate-x-full"
-        } transform fixed left-0 top-0 z-40 w-64 h-screen bg-[#2b2d31] border-r border-[#1e1f22] transition-transform duration-200 ease-in-out md:translate-x-0`}
+        } transform fixed left-0 top-0 z-40 w-64 h-screen bg-[#2b2d31] border-r border-[#1e1f22] transition-transform duration-200 ease-in-out md:translate-x-0 flex flex-col`}
       >
-        <div className="p-4 pt-16 md:pt-4">
+        <div className="p-4 pt-16 md:pt-4 flex-1">
           <h1 className="text-white text-xl font-bold mb-6">Time Tracker</h1>
           <nav className="space-y-2">
             {navItems.map((item) => (
@@ -73,6 +85,14 @@ export default function LeftNav() {
               </Link>
             ))}
           </nav>
+        </div>
+        <div className="p-4 border-t border-[#1e1f22]">
+          <button
+            onClick={handleLogout}
+            className="w-full px-4 py-2 text-left text-gray-400 hover:bg-[#383a40] hover:text-white rounded transition-colors"
+          >
+            Log Out
+          </button>
         </div>
       </div>
     </>
